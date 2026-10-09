@@ -1,0 +1,109 @@
+###
+### name: דוד בורג
+### course: אפידמיולוגיה (HIT.ac.il)
+### lesson: 01
+### date: 06/10/2026
+###
+###  כאן נראה איך להטעין קובץ מהאינטרנט וליצור גרפים
+###
+### source: https://www.gov.il/he/pages/aids-periodicreport2025 באמצעות https://plotdigitizer.com
+
+
+# Reset memory
+```{r setup-packages, include false}
+rm(list = ls(all.names = TRUE))
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE,force=TRUE)
+gc()
+```
+
+## Load required packages
+```{r load-packages, include = FALSE}  
+options("install.lock" = FALSE,
+        "repos" = c(CRAN = "https://cloud.r-project.org")) # Replace with your target repo URL
+if (!require("pacman")) install.packages("pacman") ; library(pacman)
+pacman::p_load(
+  rio,          # File import
+  here,         # File locator
+  skimr,        # get overview of data
+  tidyverse,    # data management + ggplot2 graphics, 
+  gtsummary,    # summary statistics and tests
+  rstatix,      # statistics
+  nortest,      # Anderson-Darling test for normality
+  moments,      # skewness and kurtosis
+  corrr,        # correlation analayis for numeric variables
+  janitor,      # adding totals and percents to tables
+  readr,
+  flextable,    # converting tables to HTML
+  dplyr,        # For data manipulation
+  ggplot2,      # For creating plots
+  plotly,
+  DescTools,    # For statistical functions like skewness and kurtosis
+  car,          # For Levene's test and ANOVA
+  vctrs,         # For data type handling
+  rvest,
+  tidyr
+            )
+```
+
+# Get data
+```{r load data, include false}
+file <- "https://docs.google.com/spreadsheets/d/1VEx9QeyAuGz_rew-he7lXl-9urDTeKWq5vtCfgQh7l0/edit?gid=0#gid=0"
+hiv_data <- import(file, trust = TRUE)
+glimpse(hiv_data)
+```
+
+# plot the cases
+```{r cases, include false}
+plot_ly(hiv_data, 
+        x = ~year, 
+        y = ~cases, 
+        type = 'scatter', 
+        mode = 'lines',
+        showlegend = FALSE) %>%
+  layout(title = "HIV Cases in Israel (1981–2023)",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Cases"))
+```
+
+
+# plot incidence
+```{r incidence, include false}
+# Create the plot
+plot_ly(hiv_data, 
+        x = ~year, 
+        y = ~incidence_per_miilion, 
+        type = 'scatter', 
+        mode = 'lines',
+        showlegend = FALSE) %>%
+  layout(title = "HIV Cases in Israel (1981–2023)",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Cases<br><sup>per million"))
+```
+
+# Show pop
+```{r pop, include false}
+# Create the plot
+plot_ly(hiv_data, 
+        x = ~year, 
+        y = ~cumm, 
+        type = 'scatter', 
+        mode = 'lines',
+        showlegend = FALSE) %>%
+  layout(title = "HIV Cases in Israel (1981–2023)",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "HIV+ population"))
+```
+
+# Show HIV per million
+```{r pop, include false}
+# Create the plot
+plot_ly(hiv_data, 
+        x = ~year, 
+        y = ~incidence_pop, 
+        type = 'scatter', 
+        mode = 'lines',
+        showlegend = FALSE) %>%
+  layout(title = "HIV Cases in Israel (1981–2023)",
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "HIV+ population<br><sup>per million"))
+```

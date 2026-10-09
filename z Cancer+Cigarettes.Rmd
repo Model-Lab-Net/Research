@@ -1,0 +1,202 @@
+###
+### name: David Burg
+### project: PHE
+### 
+### date: 06/10/2026
+###
+###  Cigarettes and cancer
+###
+### source: https://ourworldindata.org/grapher/sales-of-cigarettes-per-adult-per-day?tab=chart&country=~USA
+###         https://csslab.uc3m.es/dataviz/projects/2023/100407614/
+
+
+## Reset memory
+```{r setup-packages, include false}
+rm(list = ls(all.names = TRUE))
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE,force=TRUE)
+gc()
+```
+
+## Load required packages
+```{r load-packages, include false}
+options("install.lock" = FALSE,
+        "repos" = c(CRAN = "https://cloud.r-project.org")) # Replace with your target repo URL
+if (!require("pacman")) install.packages("pacman") ; library(pacman)
+pacman::p_load(
+  rio,          # File import
+  here,         # File locator
+  skimr,        # get overview of data
+  tidyverse,    # data management + ggplot2 graphics, 
+  gtsummary,    # summary statistics and tests
+  rstatix,      # statistics
+  nortest,      # Anderson-Darling test for normality
+  moments,      # skewness and kurtosis
+  corrr,        # correlation analayis for numeric variables
+  janitor,      # adding totals and percents to tables
+  flextable,    # converting tables to HTML
+  dplyr,        # For data manipulation
+  ggplot2,      # For creating plots
+  plotly,
+  DescTools,    # For statistical functions like skewness and kurtosis
+  car,          # For Levene's test and ANOVA
+  vctrs,         # For data type handling
+  rvest,
+  tidyr,
+  lmtest,
+  vars
+            )
+```
+ 
+## Get US measles
+```{r read-data, echo=FALSE}
+## read the data in a file online
+file <- "https://ourworldindata.org/grapher/sales-of-cigarettes-per-adult-per-day.csv?v=1&csvType=full&useColumnShortNames=true"
+file_cig  <- import(file, trust  = TRUE)
+file <- "https://ourworldindata.org/grapher/lung-cancer-death-rates-males.csv?v=1&csvType=full&useColumnShortNames=true"
+file_cancer  <- import(file, trust  = TRUE)
+
+
+us_cig <- file_cig %>%
+  filter(entity == "United States")
+  colnames(us_cig) <- c("country", "code", "year", "cigarettes")
+
+us_cancer <- file_cancer %>%
+  filter(entity == "United States")
+  colnames(us_cancer) <- c("country", "code", "year", "cancer")
+
+# Merge datasets for plotting
+df <- merge(us_cig, us_cancer, by = "year", all = TRUE)
+```
+
+## Check out the variables
+```{r load data, include false}
+# Setting the seed based on the current time
+glimpse(df)
+```
+
+## Check correlation between cancer and cigarettes
+```{r load data, include false}
+# Perform a Simple Linear Regression
+slr <- lm(cancer ~ cigarettes, data = df)
+
+# use gtsummary to create a nice table
+slr_summary <-
+  slr %>% 
+  tbl_regression() %>%
+  add_glance_table(include = c(nobs,
+                               r.squared,
+                               statistic,
+                               logLik,
+                               AIC,
+                               sigma,
+                               p.value))
+
+# Show the table
+slr_summary
+```
+
+
+## Show the scatter plot with regression line
+```{r slr-gtsummary, include=FALSE}
+# use ggplot to show the scatter plot with regression line with linear model and confidence interval
+slr_plot <- ggplot(df, aes_string(x = "cigarettes", y = "cancer")) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "blue") +  # Adding the trend line with linear model
+  labs(title = paste("Scatter Plot of cigarettes vs cancer"),
+       x = "cigarettes",
+       y = "cancer") +
+  theme_minimal()
+ggplotly(slr_plot)
+```
+
+
+## plot the cancer data
+```{r deaths, include false}
+us_cancer_plot <- ggplot(df, aes(x = year, y = cancer)) +
+  geom_line(color = "darkred", size = 1) +
+  #geom_point(color = "darkred", size = 2) +
+  labs(
+    title = " Lung cancer deaths",
+    x = "Year",
+    y = "Cases"
+  ) +
+  scale_y_log10() +  # Add logarithmic y-axis
+  theme_minimal()
+ggplotly(us_cancer_plot)
+```
+
+
+
+## plot the cig data
+```{r deaths, include false}
+us_plot <- ggplot(df, aes(x = year, y = cigarettes)) +
+  geom_line(color = "steelblue", size = 1) +
+  #geom_point(color = "darkred", size = 2) +  # Uncommented to include points
+  labs(
+    title = "Number of Cigarettes Sold in USA",
+    x = "Year",
+    y = "Cigarettes per Person"
+  ) +
+  scale_y_log10() +  # Logarithmic y-axis
+  theme_minimal()
+ggplotly(us_plot)
+```
+
+## plot the cancer and cigarettes data
+```{r deaths, include false}
+# Calculate scaling or plot directly with separate y-axes
+fig <- plot_ly(df, x = ~year) %>%
+  # Primary Y-Axis (Cigarettes)
+  add_trace(
+    y = ~cigarettes, 
+    name = "Cigarettes per Person", 
+    type = "scatter", 
+    mode = "markers",
+    #line = list(color = "darkred"),
+    marker = list(color = "darkred")
+  ) %>%
+  # Secondary Y-Axis (Cancer Rate)
+  add_trace(
+    y = ~cancer, 
+    name = "Cancer Rate", 
+    type = "scatter", 
+    mode = "markers",
+    yaxis = "y2", # Directs this trace to the secondary axis
+    #line = list(color = "darkgreen", dash = "dash"),
+    marker = list(color = "darkgreen")
+  ) %>%
+  # Layout configuration for dual axes
+  layout(
+    title = "Cigarettes and Lung Cancer (USA)",
+    xaxis = list(title = "Year"),
+    yaxis = list(title = "Cigarettes per Person"),
+    yaxis2 = list(
+      title = "Cancer Rate",
+      overlaying = "y",
+      side = "right"
+    ),
+legend = list(
+      orientation = "h",
+      x = 0.5,
+      xanchor = "center",
+      y = -0.25,
+      yanchor = "bottom"
+    )
+  )
+
+fig
+```
+
+
+
+## Do a causaility test
+```{r deaths, include false}
+# Select optimal lag length
+ts_data <- data.frame(df[, c("year", "cigarettes", "cancer")])
+ts_data <- na.omit(ts_data)
+
+lag_selection <- VARselect(ts_data, lag.max = 20, type = "const")
+lag_selection$selection
+
+grangertest(cancer ~ cigarettes, order = 20, data = df)
+```

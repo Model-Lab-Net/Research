@@ -1,0 +1,311 @@
+###
+### David Burg
+### PHE, Rockefeller University
+###  
+### date: 06/10/2026
+###
+### Measles
+###
+### source: OWID, US, UK
+
+
+## Reset memory
+```{r setup-packages, include false}
+rm(list = ls(all.names = TRUE))
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE,force=TRUE)
+gc()
+```
+
+## New way to load required packages
+```{r load-packages, include false}
+options("install.lock" = FALSE,
+        "repos" = c(CRAN = "https://cloud.r-project.org")) # Replace with your target repo URL
+if (!require("pacman")) install.packages("pacman") ; library(pacman)
+pacman::p_load(
+  rio,          # File import
+  here,         # File locator
+  skimr,        # get overview of data
+  tidyverse,    # data management + ggplot2 graphics, 
+  gtsummary,    # summary statistics and tests
+  rstatix,      # statistics
+  nortest,      # Anderson-Darling test for normality
+  moments,      # skewness and kurtosis
+  corrr,        # correlation analayis for numeric variables
+  janitor,      # adding totals and percents to tables
+  readr,
+  flextable,    # converting tables to HTML
+  dplyr,        # For data manipulation
+  ggplot2,      # For creating plots
+  plotly,
+  DescTools,    # For statistical functions like skewness and kurtosis
+  car,          # For Levene's test and ANOVA
+  vctrs,         # For data type handling
+  rvest,
+  tidyr
+            )
+```
+
+## Get US measles
+```{r read-data, echo=FALSE}
+## read the data in a file online
+file <- "https://ourworldindata.org/grapher/number-of-measles-cases.zip?v=1&csvType=filtered&useColumnShortNames=false&yScale=linear"
+df_measles_US  <- import(file, which = 2, trust  = TRUE)
+colnames(df_measles_US) <- c("country", "code", "year", "cases", "annotations")
+```
+
+## Check out the variables
+```{r load data, include false}
+# Setting the seed based on the current time
+glimpse(df_measles_US)
+```
+
+## plot the US cases
+```{r deaths, include false}
+measles_plot <- ggplot(df_measles_US, aes(x = year, y = cases)) +
+  geom_line(color = "steelblue", size = 1) +
+  #geom_point(color = "darkred", size = 2) +
+  labs(
+    title = "Number of Measles cases in USA",
+    x = "Year",
+    y = "Cases"
+  ) +
+  scale_y_log10() +  # Add logarithmic y-axis
+  theme_minimal()
+ggplotly(measles_plot)
+```
+
+
+### --------------------------------------------
+
+## Access the population data
+```{r read-data, echo=FALSE}
+file <- "https://docs.google.com/spreadsheets/d/1q5xnY2RYX3K635yFAqITQp2BADK-rxprCYKEuNSA0RA/edit?gid=0#gid=0"
+df_child <- import(file, trust = TRUE)
+glimpse(df_child)
+```
+
+## plot the population
+```{r deaths, include false}
+df_children_plot <- ggplot(df_child, aes(x = year, y = children)) +
+  geom_line(color = "darkgray", linewidth = 1) +
+  #geom_point(color = "darkred", linewidth = 2) +
+  labs(
+    title = "Population size",
+    x = "Year",
+    y = "Children (millions)"
+  ) +
+  theme_minimal()
+ggplotly(df_children_plot)
+```
+
+
+# Calculate deaths incidence
+```{r incidence, include false}
+# Multiply all columns in df_pop (except Year) by 1000
+df_child <- df_child %>%
+  mutate(across(-year, ~ .x * 1000000))
+
+  # Join df_deaths and df_pop_scaled on Year
+df_combined <- df_measles_US %>%
+  inner_join(df_child, by = "year")  # keep only years in df_deaths
+
+df_combined <- df_combined %>%
+  mutate(cases_per_child = cases / children * 1000000)
+```
+
+## plot incidnce
+```{r mean-deaths, include false}
+mean_Killed_per_Total <- mean(df_combined$Killed_per_Total, na.rm = TRUE) 
+sd_Killed_per_Total <- sd(df_combined$Killed_per_Total, na.rm = TRUE)
+se_Killed_per_Total <- sd(df_combined$Killed_per_Total, na.rm = TRUE) / sqrt(sum(!is.na(df_combined$Killed_per_Total)))
+ymin_Killed_per_Total <- mean_Killed_per_Total - sd_Killed_per_Total
+ymax_Killed_per_Total <- mean_Killed_per_Total + sd_Killed_per_Total
+
+
+# Minor grid lines
+minor_vals <- unlist(
+  lapply(-1:4, function(i) (1:9) * 10^i)
+)
+
+# Major ticks
+major_vals <- 10^(-1:5)
+
+# Exclude major tick positions
+minor_vals <- minor_vals[!minor_vals %in% major_vals]
+
+# Create plot
+combined_plot <- plot_ly(
+  data = df_combined,
+  x = ~year,
+  y = ~cases_per_child,
+  type = "scatter",
+  mode = "lines",
+  line = list(color = "steelblue", width = 4),
+  hovertemplate = paste(
+    "Year: %{x}<br>",
+    "Cases per million children: %{y}<extra></extra>"
+  )
+) %>%
+  layout(
+    title = "Measles incidence USA",
+    xaxis = list(title = "Year"),
+    yaxis = list(
+      title = "Cases per million children",
+      type = "log",
+      range = c(-1, 5),
+      tickmode = "array",
+      tickvals = major_vals,
+      ticktext = c("10⁻¹", "10⁰", "10¹",
+                  "10²", "10³", "10⁴", "10⁵"),
+      showgrid = TRUE,
+      minor = list(ticks = "", showgrid = FALSE),
+      gridcolor = "rgba(0,0,0,0.25)",    #major grid color
+      gridwidth = 1                     #major grid size
+    ),
+    shapes = lapply(minor_vals, function(v) {
+      list(
+        type = "line",
+        xref = "paper",
+        x0 = 0, x1 = 1,
+        yref = "y",
+        y0 = v, y1 = v,
+        line = list(
+          color = "rgba(0,0,0,0.10)",
+          width = 0.5
+        ),
+        layer = "below"
+      )
+    }),
+    template = "plotly_white"
+  )
+
+# Display plot
+combined_plot
+```
+
+
+### --------------------------------------------
+
+
+## Get UK measles data
+```{r mean-deaths, include false}
+url <- "https://www.gov.uk/government/publications/measles-historic-confirmed-cases-notifications-and-deaths/measles-historic-confirmed-cases-notifications-and-deaths"
+webpage <- read_html(url)
+
+# Locate the target heading node
+target_node <- webpage %>%
+  html_element(xpath = "//h2[contains(text(), 'Measles notifications and deaths')] | //h3[contains(text(), 'Measles notifications and deaths')]")
+
+# Extract and clean table dynamically
+df_measles_UK <- target_node %>%
+  html_element(xpath = "following-sibling::table[1]") %>%
+  html_table() %>%
+  clean_names() %>%
+  # Select and rename the first 3 columns directly
+  select(Year = 1, Cases = 2, Deaths = 3) %>%
+  # Clean out footnotes/text in cells BEFORE parsing numbers
+  mutate(across(everything(), ~ gsub("\\[.*?\\]|\\(.*\\)", "", .))) %>%
+  # Extract numeric values (works even with trailing text like 'provisional')
+  mutate(
+    Year = as.integer(parse_number(Year)),
+    Cases = as.numeric(parse_number(Cases)),
+    Deaths = as.integer(parse_number(Deaths))
+  ) %>%
+  # Drop non-year/header/footer rows
+  filter(!is.na(Year) & Year >= 1940)
+
+# Check the last rows to confirm 2025 and 2026 are present
+tail(df_measles_UK)
+```
+
+## plot UK measles
+```{r deaths, include false}
+plot_measles_UK <- ggplot(df_measles_UK, aes(x = Year, y = Cases)) +
+  geom_line(color = "darkred", size = 1) +
+  #geom_point(color = "darkred", size = 2) +
+  labs(
+    title = "Number of Measles cases in UK",
+    x = "Year",
+    y = "Cases"
+  ) +
+  scale_y_log10() +  # Add logarithmic y-axis
+  theme_minimal()
+ggplotly(plot_measles_UK)
+```
+
+
+
+
+
+
+### --------------------------------------------
+### --------------------------------------------
+
+
+
+
+## Get the US child population data
+## source: https://web.archive.org/web/20260218205227if_/https://www.childstats.gov/americaschildren/tables/xls/pop1.xlsx
+```{r read-data, echo=FALSE}
+file <- "pop1.xlsx"
+df_temp <- import(file, trust = TRUE)
+
+df1 <- df_temp[1:2, , drop = FALSE]  # rows 1 and 2, keep as data.frame
+#df1 <- as.matrix(df1)  # remove column names
+rownames(df1) <- NULL
+colnames(df1) <- NULL
+df1 <- t(df1)
+df1 <- df1[-1, ]
+df1 <- as.data.frame(df1)
+
+df2 <- df_temp[8:9, , drop = FALSE]  # rows 8 and 8, keep as data.frame
+#df2 <- as.matrix(df2)  # remove column names
+rownames(df2) <- NULL
+colnames(df2) <- NULL
+df2 <- t(df2)
+df2 <- df2[-1, ]
+df2 <- as.data.frame(df2)
+
+df3 <- df_temp[15:16, , drop = FALSE]  # rows 15 and 16, keep as data.frame
+#df3 <- as.matrix(df3)  # remove column names
+rownames(df3) <- NULL
+colnames(df3) <- NULL
+df3 <- t(df3)
+df3 <- df3[-1, ]
+df3 <- as.data.frame(df3)
+
+df4 <- df_temp[22:23, , drop = FALSE]  # rows 22 and 23, keep as data.frame
+#df4 <- as.matrix(df4)  # remove column names
+rownames(df4) <- NULL
+colnames(df4) <- NULL
+df4 <- t(df4)
+df4 <- df4[-1, ]
+df4 <- as.data.frame(df4)
+
+df_child <- bind_rows(df1, df2, df3, df4)
+colnames(df_child) <- c("year", "children")
+df_child$year <- as.numeric(df_child$year)
+df_child$children <- as.numeric(df_child$children)
+df_child <- head(df_child, -6)
+
+glimpse(df_child)
+
+# Add years
+df_child <- df_child %>%
+  add_row(year = 2024, children = 72.548879)
+df_child <- df_child %>%
+  add_row(year = 2025, children = 72.021348)
+df_child <- df_child %>%
+  add_row(year = 2026, children = 71.683186)
+
+
+# Get projection for 2026
+df_historical <- df_child %>% 
+  filter(year >= 2021 & year <= 2025)
+model <- lm(children ~ year, data = df_historical)
+df_2026 <- data.frame(year = 2026)
+projection_2026 <- predict(model, newdata = df_2026)
+
+
+glimpse(df_child)
+```

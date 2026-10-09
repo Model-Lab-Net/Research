@@ -1,0 +1,129 @@
+###
+### name: David Burg, Jesse Ausubel
+### project: US immigration
+###          PHE, Rockefeller University
+### 
+### date: 06/10/2026
+###
+### source: https://ohss.dhs.gov/topics/immigration/yearbook
+
+
+## Load required packages
+```{r load-packages, include false}
+options("install.lock" = FALSE,
+        "repos" = c(CRAN = "https://cloud.r-project.org")) # Replace with your target repo URL
+if (!require("pacman")) install.packages("pacman") ; library(pacman)
+pacman::p_load(
+  rio, rsdmx,    # File import
+  here,         # File locator
+  skimr,        # get overview of data
+  tidyverse,    # data management + ggplot2 graphics, 
+  gtsummary,    # summary statistics and tests
+  rstatix,      # statistics
+  nortest,      # Anderson-Darling test for normality
+  moments,      # skewness and kurtosis
+  corrr,        # correlation analayis for numeric variables
+  janitor,      # adding totals and percents to tables
+  flextable,    # converting tables to HTML
+  dplyr,        # For data manipulation
+  ggplot2,      # For creating plots
+  plotly,
+  DescTools,    # For statistical functions like skewness and kurtosis
+  car,          # For Levene's test and ANOVA
+  vctrs,         # For data type handling
+  rvest,
+  tidyr,
+  lmtest,
+  vars
+            )
+```
+ 
+## Get US immigration data
+```{r read-data, echo=FALSE}
+## read the data in a file online
+file <- "https://ohss.dhs.gov/system/files/2026-06/2026_0604_ohss_yearbook_lawful_permanent_residents_fy2024.xlsx"
+perm_res  <- import(file, which = 2, skip = 5, trust  = TRUE)
+#file <- "https://ourworldindata.org/grapher/lung-cancer-death-rates-males.csv?v=1&csvType=full&useColumnShortNames=true"
+#file_cancer  <- import(file, trust  = TRUE)
+
+
+perm_res <- perm_res %>%
+  # 1. Convert all columns to numeric first
+  mutate(across(everything(), as.numeric)) %>%
+  
+  # 2. Rename pairs cleanly in ONE pass (Odd = Year, Even = Number)
+  rename_with(function(cols) {
+    pair_id <- (seq_along(cols) + 1) %/% 2
+    type <- ifelse(seq_along(cols) %% 2 != 0, "Year", "Number")
+    paste0(type, "_", pair_id)
+  }) %>%
+  
+  # 3. Pivot pairs into unified columns
+  pivot_longer(
+    cols = everything(),
+    names_to = c(".value", "pair"),
+    names_sep = "_"
+  ) %>%
+  
+  # 4. Cleanup
+  dplyr::select(Year, Number) %>%
+  filter(!is.na(Year)) %>%
+  arrange(Year)
+
+perm_res <- perm_res %>%
+  mutate(Cumulative = cumsum(Number))
+
+glimpse(perm_res)
+```
+
+## plot US immigration data
+```{r read-data, echo=FALSE}
+plot_perm_res <- plot_ly(
+  data = perm_res,
+  x = ~Year,
+  y = ~Cumulative,
+  type = "scatter",
+  mode = "lines+markers",
+  line = list(color = "#2b5c8f", width = 2),
+  marker = list(size = 6, color = "#2b5c8f"),
+  hovertemplate = "<b>Year:</b> %{x}<br><b>Number:</b> %{y:,}<extra></extra>"
+) %>%
+  layout(
+    title = list(text = "Number by Year", font = list(size = 18)),
+    xaxis = list(title = "Year", gridcolor = "#e5e5e5"),
+    yaxis = list(title = "Number", gridcolor = "#e5e5e5"),
+    hovermode = "x unified",
+    paper_bgcolor = "#ffffff",
+    plot_bgcolor = "#fafafa"
+  )
+plot_perm_res
+```
+
+
+## Get US migrant stock data
+```{r read-data, echo=FALSE}
+## read the data in a file online
+url <- paste0(
+  "https://sdmx.oecd.org/public/rest/data/OECD.ELS.IMD,",
+  "DSD_MIG_F@DF_MIG_POPF,1.0/",
+  ".AUS+AUT+BEL+CAN+CHL+COL+CRI+CZE+DNK+EST+FIN+FRA+DEU+GRC+HUN+ISL+IRL+ISR+ITA+JPN+KOR+LVA+LTU+LUX+MEX+NLD+NZL+NOR+POL+PRT+SVK+SVN+ESP+SWE+CHE+TUR+GBR+USA+EU15+AFG+ALB+DZA+ASM+AGO+AND+AIA+ATG+ARG+ARM+ABW+AZE+BHS+BHR+BGD+BRB+BLR+BLZ+BEN+BMU+BTN+BOL+BIH+BWA+BRA+VGB+BRN+BGR+BFA+BDI+CPV+KHM+CMR+CYM+CAF+TCD+CHN+COM+COG+COK+CIV+HRV+CUB+CYP+PRK+COD+DJI+DMA+DOM+ECU+EGY+SLV+GNQ+ERI+SWZ+ETH+FLK+FRO+FJI+GUF+PYF+GAB+GMB+GEO+GHA+GIB+GRL+GRD+GLP+GUM+GTM+GIN+GNB+GUY+HTI+VAT+HND+HKG+IND+IDN+IRN+IRQ+JAM+JOR+KAZ+KEN+KIR+XKV+KWT+KGZ+LAO+LBN+LSO+LBR+LBY+LIE+MAC+MDG+MWI+MYS+MDV+MLI+MLT+MHL+MTQ+MRT+MUS+MYT+FSM+MDA+MCO+MNG+MNE+MSR+MAR+MOZ+MMR+NAM+NRU+NPL+NCL+NIC+NER+NGA+NIU+NFK+MKD+MNP+OMN+PAK+PLW+PSE+PAN+PNG+PRY+PER+PHL+PCN+PRI+QAT+REU+ROU+RUS+RWA+SHN+KNA+LCA+SPM+VCT+WSM+SMR+STP+SAU+SEN+SRB+SYC+SLE+SGP+SLB+SOM+ZAF+SSD+LKA+SDN+SUR+SJM+SYR+TWN+TJK+TZA+THA+TLS+TGO+TKL+TON+TTO+TUN+TKM+TCA+TUV+UGA+UKR+ARE+VIR+URY+UZB+VUT+VEN+VNM+WLF+YEM+ZMB+ZWE+CSK_F+ANT_F+SCG_F+SUN_F+YUG_F+EEA+A4+W+W_X+STLS.A.._T...?",
+  "startPeriod=1995&dimensionAtObservation=AllDimensions"
+)
+
+us_migrant_stock <- read.csv(csv_url, stringsAsFactors = FALSE)
+
+# Cleanup the data
+names(us_migrant_stock) <- gsub("_", ".", names(us_migrant_stock))
+names(us_migrant_stock) <- tolower(names(us_migrant_stock))
+glimpse(us_migrant_stock)
+
+# Get all migrant stock
+us_migrant_stock <- us_migrant_stock %>%
+  filter(ref.area == "USA") %>%
+  group_by(time.period) %>%
+  summarise(
+    migrant_stock = sum(obs.value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(time.period)
+```
